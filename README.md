@@ -1,10 +1,11 @@
 # Sonic Cipher
 
-You can also use this: https://markdaman1236.github.io/Sonic-Cipher/
+You can run Sonic Cipher in either of these ways:
 
-Single-file browser tool that encrypts short text with **AES-256-GCM** and sends it as sound (bundled [ggwave](https://github.com/ggerganov/ggwave)) or as copy-paste ciphertext. Nothing is installed and nothing is uploaded.
+- **Use the hosted page** (HTTPS, so the microphone works in the browser): https://markdaman1236.github.io/Sonic-Cipher/
+- **Download the HTML file** from this repo and open it locally on each device. Nothing is installed and nothing is uploaded.
 
-Open the live page above, or save the HTML and open it in a browser on both devices.
+Single-file browser tool that encrypts short text with **AES-256-GCM** and sends it as sound (bundled [ggwave](https://github.com/ggerganov/ggwave)) or as copy-paste ciphertext.
 
 ## What is this for?
 
