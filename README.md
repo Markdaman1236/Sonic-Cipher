@@ -1,8 +1,10 @@
 # Sonic Cipher
 
+You can also use this: https://markdaman1236.github.io/Sonic-Cipher/
+
 Single-file browser tool that encrypts short text with **AES-256-GCM** and sends it as sound (bundled [ggwave](https://github.com/ggerganov/ggwave)) or as copy-paste ciphertext. Nothing is installed and nothing is uploaded.
 
-Open [`sonic-cipher.html`](sonic-cipher.html) in a browser on both devices.
+Open the live page above, or save the HTML and open it in a browser on both devices.
 
 ## What is this for?
 
@@ -41,7 +43,7 @@ Both sides must use the same HTML revision, the same passphrase, and the same sp
 4. On device A: Encrypt & play.
 5. Plaintext appears on B after a valid frame is decoded.
 
-Microphone capture needs HTTPS or localhost. Encrypt, play, and text decrypt work from a saved `.html` file.
+Microphone capture needs HTTPS or localhost. The hosted page is HTTPS, so the mic works there. Encrypt, play, and text decrypt also work from a saved `.html` file.
 
 ```bash
 python3 -m http.server 8080
