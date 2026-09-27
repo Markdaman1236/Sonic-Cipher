@@ -78,7 +78,7 @@ else if (typeof exports === 'object')
   <div class="wrap">
     <header>
       <h1>Sonic Cipher</h1>
-      <p>AES-256-GCM for the text, <strong>ggwave</strong> for the air. Start listen on the other device first.</p>
+      <p>AES-256-GCM for the text, <strong>ggwave</strong> for the air. Start listen on the other device first. Default profile is for radio and phone lines — other modes often fail on those links.</p>
     </header>
     <div class="grid">
       <section class="card">
@@ -89,7 +89,13 @@ else if (typeof exports === 'object')
         <textarea id="msg">Meet at the north gate 19:30</textarea>
         <label for="profile">Profile</label>
         <select id="profile">
-          <option value="slow" selected>Slow — audible</option>
+          <option value="radio" selected>Radio / phone — DT slow</option>
+          <option value="radio_fast">Radio / phone — DT fast</option>
+          <option value="radio_fastest">Radio / phone — DT fastest</option>
+          <option value="radio_mt">Radio / phone — MT slow</option>
+          <option value="radio_mt_fast">Radio / phone — MT fast</option>
+          <option value="radio_mt_fastest">Radio / phone — MT fastest</option>
+          <option value="slow">Slow — audible</option>
           <option value="medium">Medium — audible</option>
           <option value="fast">Fast — audible</option>
           <option value="ultra">Ultrafast — audible</option>
@@ -98,13 +104,13 @@ else if (typeof exports === 'object')
           <option value="fast_u">Fast — ultrasonic</option>
           <option value="ultra_u">Ultrafast — ultrasonic</option>
         </select>
+        <p class="hint">Default is DT slow, a narrow band for walkie-talkies and phone lines (~1.1–2.6 kHz). Try DT fast only after slow decodes. MT is even narrower. Audible and ultrasonic modes need a wider, cleaner path (same-room speaker to mic). Many radios, landlines, and voice-call codecs will not decode those other modes.</p>
         <label for="vol">Playback volume <span id="volVal">80%</span></label>
         <input id="vol" type="range" min="20" max="200" step="5" value="80" />
         <div class="row">
           <button class="primary" id="btnPlay">Encrypt &amp; play</button>
           <button id="btnStopTx">Stop</button>
         </div>
-        <p class="hint">Start listening on other device before playing. Make sure the passphrase matches on both devices!.</p>
       </section>
       <section class="card">
         <h2>2. Listen &amp; decrypt</h2>
@@ -139,7 +145,8 @@ else if (typeof exports === 'object')
       <div class="log" id="log"></div>
       <details open>
         <summary>What is this for?</summary>
-        <p>Sonic Cipher is a single HTML file you open in a browser. Two people who share a passphrase can send a short encrypted note as sound — phone speaker to phone mic — or as copy-paste ciphertext. Nothing is installed and nothing is uploaded.</p>
+        <p>Run it from the hosted page (<a href="https://markdaman1236.github.io/Sonic-Cipher/" style="color:var(--accent)">https://markdaman1236.github.io/Sonic-Cipher/</a>) or download this HTML file and open it locally. Nothing is installed and nothing is uploaded.</p>
+        <p>Two people who share a passphrase can send a short encrypted note as sound — phone speaker to phone mic — or as copy-paste ciphertext.</p>
         <p><strong>Use cases</strong></p>
         <ul>
           <li><strong>Radio / ham / analog links</strong> — play the tone into a transceiver or walkie-talkie; the far side holds a phone to the speaker and decrypts. Useful when you have voice but not a data channel.</li>
@@ -153,7 +160,7 @@ else if (typeof exports === 'object')
           <li><strong>Confidentiality / integrity:</strong> AES-256-GCM via Web Crypto. Random 16-byte salt, 12-byte IV, 16-byte message id. Version, id, and timestamp are bound as AAD so headers cannot be swapped.</li>
           <li><strong>Key:</strong> PBKDF2-HMAC-SHA-256, 600&nbsp;000 iterations, from a shared passphrase (12+ characters). Strength tracks the passphrase, not a public-key identity.</li>
           <li><strong>Freshness:</strong> millisecond timestamp; packets outside ±10 minutes are rejected. Duplicate ids on this page are logged but still shown.</li>
-          <li><strong>Air layer:</strong> bundled <strong>ggwave</strong> (FSK + Reed–Solomon). Audible and ultrasonic profiles at slow / medium / fast / ultrafast. Long payloads are split into 80-character frames and reassembled.</li>
+          <li><strong>Air layer:</strong> bundled <strong>ggwave</strong> (FSK + Reed–Solomon). Default is dual-tone slow (narrow band for radio and phone lines), with DT/MT fast and fastest as quicker options on the same band. Also audible and ultrasonic at slow / medium / fast / ultrafast. Those wider modes often fail on walkie-talkies, landlines, and compressed voice calls. Faster DT/MT is still narrow-band, but shorter tones drop more easily on VOX, AGC, and compressed voice. Long payloads are split into 80-character frames and reassembled.</li>
           <li><strong>Compatibility:</strong> legacy <code>SC1</code> blobs still decrypt. Current packets are <code>SC2</code>. Mic capture needs HTTPS or localhost; playback works from a saved file.</li>
         </ul>
         <p><strong>What it runs on</strong></p>
@@ -163,7 +170,7 @@ else if (typeof exports === 'object')
           <li><strong>Desktop / laptop</strong> — Chrome, Edge, Firefox, or Safari on Windows, macOS, or Linux. A real speaker and mic beat a Bluetooth headset for ggwave.</li>
           <li><strong>Other</strong> — any device with a modern browser and Web Crypto + Web Audio (Chromebooks, some smart TVs/kiosks). No native app and no install. Mic capture needs <strong>HTTPS or localhost</strong>; opening a saved <code>.html</code> is enough for encrypt / play / text decrypt.</li>
         </ul>
-        <p>Both sides must use the same HTML revision, the same passphrase, and the same speed profile. Listen first, then play. Ultrasonic modes need speakers and mics that still respond above ~15&nbsp;kHz — many phones do not.</p>
+        <p>Both sides must use the same HTML revision, the same passphrase, and the same speed profile. Listen first, then play. Hold PTT for the whole playback on a radio, including gaps between frames. Ultrasonic modes need speakers and mics that still respond above ~15&nbsp;kHz — many phones do not. Audible and ultrasonic profiles use a ~4.5&nbsp;kHz-wide band that many radios and phone lines will not pass.</p>
       </details>
     </section>
   </div>
@@ -181,14 +188,20 @@ else if (typeof exports === 'object')
   const seenMsgIds = new Map(); // msgId hex -> expiry ms
 
   const PROFILES = {
-    slow:     { proto: "GGWAVE_PROTOCOL_AUDIBLE_NORMAL",    fallback: 0, vol: 22 },
-    medium:   { proto: "GGWAVE_PROTOCOL_AUDIBLE_FAST",      fallback: 1, vol: 20 },
-    fast:     { proto: "GGWAVE_PROTOCOL_AUDIBLE_FASTEST",   fallback: 2, vol: 18 },
-    ultra:    { proto: "GGWAVE_PROTOCOL_AUDIBLE_FASTEST",   fallback: 2, vol: 16 },
-    slow_u:   { proto: "GGWAVE_PROTOCOL_ULTRASOUND_NORMAL", fallback: 3, vol: 28 },
-    medium_u: { proto: "GGWAVE_PROTOCOL_ULTRASOUND_FAST",   fallback: 4, vol: 26 },
-    fast_u:   { proto: "GGWAVE_PROTOCOL_ULTRASOUND_FASTEST",fallback: 5, vol: 24 },
-    ultra_u:  { proto: "GGWAVE_PROTOCOL_ULTRASOUND_FASTEST",fallback: 5, vol: 22 },
+    radio:            { proto: "GGWAVE_PROTOCOL_DT_NORMAL",         fallback: 6,  vol: 26 },
+    radio_fast:       { proto: "GGWAVE_PROTOCOL_DT_FAST",           fallback: 7,  vol: 24 },
+    radio_fastest:    { proto: "GGWAVE_PROTOCOL_DT_FASTEST",        fallback: 8,  vol: 22 },
+    radio_mt:         { proto: "GGWAVE_PROTOCOL_MT_NORMAL",         fallback: 9,  vol: 28 },
+    radio_mt_fast:    { proto: "GGWAVE_PROTOCOL_MT_FAST",           fallback: 10, vol: 26 },
+    radio_mt_fastest: { proto: "GGWAVE_PROTOCOL_MT_FASTEST",        fallback: 11, vol: 24 },
+    slow:             { proto: "GGWAVE_PROTOCOL_AUDIBLE_NORMAL",    fallback: 0,  vol: 22 },
+    medium:           { proto: "GGWAVE_PROTOCOL_AUDIBLE_FAST",      fallback: 1,  vol: 20 },
+    fast:             { proto: "GGWAVE_PROTOCOL_AUDIBLE_FASTEST",   fallback: 2,  vol: 18 },
+    ultra:            { proto: "GGWAVE_PROTOCOL_AUDIBLE_FASTEST",   fallback: 2,  vol: 16 },
+    slow_u:           { proto: "GGWAVE_PROTOCOL_ULTRASOUND_NORMAL", fallback: 3,  vol: 28 },
+    medium_u:         { proto: "GGWAVE_PROTOCOL_ULTRASOUND_FAST",   fallback: 4,  vol: 26 },
+    fast_u:           { proto: "GGWAVE_PROTOCOL_ULTRASOUND_FASTEST",fallback: 5,  vol: 24 },
+    ultra_u:          { proto: "GGWAVE_PROTOCOL_ULTRASOUND_FASTEST",fallback: 5,  vol: 22 },
   };
 
   const logEl = document.getElementById("log");
