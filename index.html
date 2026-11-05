@@ -1576,11 +1576,29 @@ const NONCE_LEN = 8;
 const TAG_BITS = 128;
 const MASTER_SALT = te.encode('SonicCipher-v3-master');
 
-// Modem payload flag bits.
+// Modem payload flag bits. Note the modem carries only FOUR flag bits, and all
+// four are now in use, so a fifth flag needs a payload format change.
 const F_ENCRYPTED = 0x01;
 const F_COMPRESSED = 0x02;
 const F_KEYEX = 0x04;
 const F_SESSION = 0x08;
+
+// Decide what kind of frame arrived, from its flags alone.
+//
+// ORDER MATTERS, and getting it wrong was a real bug. A key-exchange frame
+// carries a raw public key, which is neither ciphertext nor text, so it
+// deliberately does NOT set F_ENCRYPTED -- it sets only F_KEYEX. Testing
+// encryption first therefore sent every public key down the clear-text path,
+// where it was UTF-8 decoded into mojibake and the peer-key handler never ran,
+// so a key exchange could never complete. F_KEYEX must be checked first.
+//
+// Returns 'keyex' | 'clear' | 'session' | 'psk'.
+function classifyFrame(flags) {
+  if (flags & F_KEYEX) return 'keyex';
+  if (!(flags & F_ENCRYPTED)) return 'clear';
+  if (flags & F_SESSION) return 'session';
+  return 'psk';
+}
 
 function cat(...parts) {
   let n = 0;
@@ -2009,22 +2027,32 @@ function makeReplayGuard(limit = 512) {
     return { bytes: s.envelope, flags: s.flags };
   }
 
+  // Frame-type dispatch lives in classifyFrame() so the ordering is stated once
+  // and covered by tests -- an earlier version checked the encryption bit first
+  // and silently routed public keys into the clear-text decoder.
   async function interpretIncoming(message, flags) {
-    if (!(flags & F_ENCRYPTED)) {
-      return { text: await unpackPlaintext(message, !!(flags & F_COMPRESSED)), how: 'clear text' };
+    switch (classifyFrame(flags)) {
+      case 'keyex':
+        return { keyBytes: message, how: 'key exchange' };
+
+      case 'clear':
+        return { text: await unpackPlaintext(message, !!(flags & F_COMPRESSED)), how: 'clear text' };
+
+      case 'session': {
+        if (!kex.session) throw new Error('session message received but no key exchange has completed');
+        const r = await openSession(message, kex.session, flags);
+        if (!replay.check(r.nonce)) throw new Error('replayed message ignored');
+        return { text: r.text, how: 'key-exchange session' };
+      }
+
+      default: {
+        const pass = $('pass').value;
+        if (!pass) throw new Error('enter the passphrase to decrypt');
+        const r = await openPassphrase(message, pass, flags);
+        if (!replay.check(r.nonce)) throw new Error('replayed message ignored');
+        return { text: r.text, how: 'passphrase' };
+      }
     }
-    if (flags & F_KEYEX) return { keyBytes: message, how: 'key exchange' };
-    if (flags & F_SESSION) {
-      if (!kex.session) throw new Error('session message received but no key exchange has completed');
-      const r = await openSession(message, kex.session, flags);
-      if (!replay.check(r.nonce)) throw new Error('replayed message ignored');
-      return { text: r.text, how: 'key-exchange session' };
-    }
-    const pass = $('pass').value;
-    if (!pass) throw new Error('enter the passphrase to decrypt');
-    const r = await openPassphrase(message, pass, flags);
-    if (!replay.check(r.nonce)) throw new Error('replayed message ignored');
-    return { text: r.text, how: 'passphrase' };
   }
 
   // ------------------------------------------------------------ transmit ---
@@ -2324,8 +2352,18 @@ function makeReplayGuard(limit = 512) {
     kex.theirs = Uint8Array.from(bytes);
     pill('stKexTheirs', 'peer key received', 'ok');
     log('Received a peer public key (' + kex.theirs.length + ' bytes)');
-    if (mode !== 'kex') log('Switch to Key exchange mode to use it');
-    if (!kex.mine) { log('Now press "Generate & send my key" to complete the exchange'); return; }
+
+    // Reveal the key-exchange pane instead of telling the user to go and find
+    // it: the button they need next lives inside it and is hidden in any other
+    // mode, which made a received key look like a dead end.
+    const kexBtn = Array.prototype.find.call(
+      $('modeSeg').querySelectorAll('button'), (b) => b.dataset.mode === 'kex');
+    if (kexBtn && !kexBtn.disabled) setMode('kex');
+
+    if (!kex.mine) {
+      log('Now press "Generate & send my key" to complete the exchange');
+      return;
+    }
     await completeKex();
   }
 
