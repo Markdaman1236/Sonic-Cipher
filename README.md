@@ -1,51 +1,167 @@
 # Sonic Cipher
 
-You can run Sonic Cipher in either of these ways:
+Single-file browser tool that sends a short message over **any voice path** — HF
+amateur SSB, FM radio and walkie-talkies, landlines, VoIP, or a phone held up to
+a speaker — using a narrowband MFSK modem built specifically for those channels.
+Optionally encrypted with AES-256-GCM, with X25519 key exchange.
 
-- **Use the hosted page** (HTTPS, so the microphone works in the browser): https://markdaman1236.github.io/Sonic-Cipher/
-- **Download the HTML file** from this repo and open it locally on each device. Nothing is installed and nothing is uploaded.
+- **Hosted (HTTPS, so the microphone works):** https://markdaman1236.github.io/Sonic-Cipher/
+- **Or download `index.html`** and open it locally. Nothing is installed, nothing
+  is uploaded, and the page makes no network requests at all.
 
-Single-file browser tool that encrypts short text with **AES-256-GCM** and sends it as sound (bundled [ggwave](https://github.com/ggerganov/ggwave)) or as copy-paste ciphertext.
+On iPhone, open the hosted page and use **Share → Add to Home Screen**. A local
+file loses microphone access on iOS (and possibly Web Crypto); the page reports
+what is available on your device in a panel at the top.
 
-## What is this for?
+---
 
-Two people who share a passphrase can send a short encrypted note as sound — phone speaker to phone mic — or as an `SC2.` text packet.
+## ⚠️ Amateur radio and encryption
 
-**Use cases**
+In most jurisdictions — FCC §97.113(a)(4) in the US and the equivalent rules
+across ITU Regions 1–3 — transmitting messages **encoded to obscure their
+meaning is not permitted on amateur bands**.
 
-- **Radio / ham / analog links** — play the tone into a transceiver or walkie-talkie; the far side holds a phone to the speaker and decrypts. Useful when you have voice but not a data channel.
-- **Mobile phone calls** — put the call on speaker, play on one handset, listen on the other. Works across ordinary GSM/VoLTE voice, not only in the same room.
-- **VoIP / video calls** — same idea over FaceTime, Signal, Zoom, Teams, or a radio app. The ciphertext rides the audio mix.
-- **Air-gap / same room** — pass a note between laptops or phones with no cable, QR, or network.
-- **Text packet** — encrypt to an `SC2.` string and send that over SMS, email, chat, or paper if sound is a bad path.
+Use **Clear text** mode on the air. It is an ordinary digital mode and keeps the
+full error correction, so it is just as robust. Keep the encrypted modes for
+wireline paths (landline, VoIP) and for licences that do permit encryption.
 
-## Technical summary
+---
 
-- **Confidentiality / integrity:** AES-256-GCM via Web Crypto. Random 16-byte salt, 12-byte IV, 16-byte message id. Version, id, and timestamp are bound as AAD so headers cannot be swapped.
-- **Key:** PBKDF2-HMAC-SHA-256, 600 000 iterations, from a shared passphrase (12+ characters). Strength tracks the passphrase, not a public-key identity.
-- **Freshness:** millisecond timestamp; packets outside ±10 minutes are rejected. Duplicate ids on this page are logged but still shown.
-- **Air layer:** bundled **ggwave** (FSK + Reed–Solomon). Audible and ultrasonic profiles at slow / medium / fast / ultrafast. Long payloads are split into 80-character frames and reassembled.
-- **Compatibility:** legacy `SC1` blobs still decrypt. Current packets are `SC2`. Mic capture needs HTTPS or localhost; playback works from a saved file.
+## Use it
 
-## What it runs on
+1. **Receiver first.** On the receiving device press *Start listening* and allow
+   the microphone. It auto-detects the profile, so only the sender chooses one.
+2. **Pick a mode** — Passphrase, Key exchange, or Clear text.
+3. **Pick a channel profile** on the sending device and press *Transmit*. The
+   page shows how long the transmission will take before you start.
+4. On a radio, key up, wait for the tone to begin, and **hold PTT for the whole
+   transmission including the gaps**.
 
-- **iPhone / iPad** — Safari or any browser that can open a local HTML file or a hosted page. Grant the microphone when listening. Raise playback volume; iOS speakers are often quiet. FaceTime and cellular calls work if the far end can hear the tones.
-- **Android** — Chrome, Firefox, or Samsung Internet. Same file. Allow the mic; turn off extra noise suppression in the browser if decode is flaky.
-- **Desktop / laptop** — Chrome, Edge, Firefox, or Safari on Windows, macOS, or Linux. A real speaker and mic beat a Bluetooth headset for ggwave.
-- **Other** — any device with a modern browser and Web Crypto + Web Audio (Chromium-based kiosks, Chromebooks). No native app and no install.
+### Channel profiles
 
-Both sides must use the same HTML revision, the same passphrase, and the same speed profile. Listen first, then play. Ultrasonic modes need speakers and mics that still respond above ~15 kHz — many phones do not.
+| Profile | Baud | Tones | Use for |
+|---|---|---|---|
+| `hf-robust` | 15.625 | 1200–1669 Hz | Weak HF SSB, and through voice codecs (AMR/GSM/Opus) |
+| `hf-normal` | 31.25 | 1000–1938 Hz | Ordinary HF SSB |
+| `fm` | 62.5 | 700–2575 Hz | VHF/UHF FM, walkie-talkie |
+| `wire` | 125 | 700–2575 Hz | Landline, VoIP, same room |
 
-## Two-device receive
+Start with `wire` for a same-room or landline test — it is the fastest. Use
+`hf-robust` through a phone or VoIP call, since it is the one that survives
+speech codecs.
 
-1. Same passphrase and same profile on both devices.
-2. On device B: Start listening and allow the mic.
-3. Hold device A’s speaker about 10–40 cm from B’s mic (or play into a call / radio).
-4. On device A: Encrypt & play.
-5. Plaintext appears on B after a valid frame is decoded.
+### WAV in and out
 
-Microphone capture needs HTTPS or localhost. The hosted page is HTTPS, so the mic works there. Encrypt, play, and text decrypt also work from a saved `.html` file.
+*Download WAV* writes a 48 kHz mono file you can feed straight into a rig through
+a soundcard interface. *Decode a WAV…* reads one back. This is the easiest way to
+bench-test without two live devices — and on iOS it lets you receive without
+microphone permission at all: record the tones with Voice Memos, then decode the
+file.
 
-```bash
-python3 -m http.server 8080
-```
+### Key exchange
+
+Each side sends a one-time X25519 public key, then both display the same four
+words. **Read those words aloud over the voice channel you already have.** If
+they match on both ends, nobody is in the middle. If you also set a passphrase,
+the exchange is authenticated by it and the words become a double check.
+
+---
+
+## How it works
+
+16-tone MFSK, every tone inside **700–2600 Hz**, with one tone sounding at a time
+at constant amplitude.
+
+- **Two-tone probe** measures the channel's frequency offset before any data is
+  demodulated, so an SSB rig mistuned by a few hundred hertz still decodes.
+- **Goertzel detection** evaluates arbitrary frequencies rather than fixed FFT
+  bins, so the measured offset is simply applied.
+- **Lead-in warble** keys VOX, settles AGC and converges echo cancellers and
+  jitter buffers. It alternates tones rather than holding one, because a steady
+  tone is what a network echo canceller learns to suppress.
+- **Cauchy MDS erasure coding** over GF(256) with a per-block CRC: the message is
+  split into small blocks and any sufficient subset rebuilds it. The sender keeps
+  emitting fresh parity blocks and the receiver finishes as soon as enough
+  arrive — no back-channel, which is what one-way radio requires.
+- **Preamble and sync repeat before every block group**, so a burst landing on
+  one acquisition point does not cost the message.
+- **Constant envelope** means nothing to clip, constant FM deviation, and no
+  amplitude for a limiter or compressor to chew on.
+
+### Crypto
+
+- **Passphrase:** PBKDF2-HMAC-SHA-256 (600 000 iterations, derived once and
+  cached) → HKDF per message → AES-256-GCM. The envelope is an 8-byte nonce plus
+  ciphertext and tag — 52 bytes for a 28-character message.
+- **Key exchange:** X25519 (32-byte keys; P-256 fallback) with HKDF, and a
+  4-word, 24-bit short authentication string for voice verification.
+- **Passphrase + key exchange together** gives an authenticated exchange with
+  forward secrecy: the passphrase becomes the HKDF salt, so an active attacker
+  cannot derive the session even if the words are never compared.
+- **Replay protection** remembers nonces. It does **not** depend on clocks
+  agreeing between the two devices.
+
+### Measured
+
+Tested against a channel model including band-limiting, noise, SSB tuning error,
+Watterson selective fading, clock drift, clipping, µ-law companding, dropouts and
+impulsive noise — and separately through real G.711, GSM 06.10, AMR, Opus, G.722,
+iLBC and Speex encoders.
+
+- Clean links, good and mistuned SSB, good and marginal FM, and landlines
+  (including a poor one): **decodes every time**.
+- Marginal HF SSB at 6 dB SNR with CCIR-poor fading: reliable on the HF profiles.
+- **Through every speech codec tested**, including AMR at its lowest 4.75 kbit/s
+  rate: the HF profiles decoded every attempt. A mobile or VoIP *voice call* is a
+  workable path.
+
+**Limits, honestly:** at 0 dB SNR *combined with* severe HF fading it fails —
+either impairment alone is fine, and fixing the combination needs a
+soft-decision code of the kind Olivia uses, not more parity. And a link dropping
+out more than roughly once a second in long bursts defeats it, though by then
+voice on the same link is badly broken up too.
+
+---
+
+## What changed from the previous version
+
+The old audio layer was [ggwave](https://github.com/ggerganov/ggwave), which
+could not work on these channels — not as a tuning problem, but physically. It
+places tones on an FFT bin grid, and even its narrowest modes occupied roughly
+**1125–4125 Hz**, while a landline passes 300–3400 Hz and a walkie-talkie or SSB
+rig passes about 300–2700 Hz. The upper half of every byte was filtered away
+before it arrived. Its sync markers also used sixteen simultaneous tones, which
+any FM limiter, phone companding or audio compressor turns to mush, and it had no
+way to measure the frequency error SSB tuning always introduces. A 28-character
+message also became 176 characters on air, with no retransmission and no
+cross-frame FEC, so losing one frame of eight destroyed the whole message.
+
+Also fixed along the way:
+
+- Playback had **three gain stages in series** and clipped hard at the raised
+  volume the old help text recommended. Now one stage that cannot exceed full
+  scale.
+- Capture used a deprecated main-thread node that **dropped audio** whenever the
+  page was busy — and it was busy, logging and running PBKDF2. Now an
+  AudioWorklet.
+- The receiver compared each decode with the previous one and returned early,
+  which **silently discarded a deliberate resend**. Repeats are now suppressed
+  only within a single transmission, so resending always works.
+- Decryption **rejected anything more than ten minutes from your clock**, so two
+  devices with disagreeing clocks failed every message.
+- PBKDF2 ran its 600 000 iterations on *every* decrypt attempt.
+
+Packets from the older version (`SC1.` / `SC2.`) still decrypt in the text panel.
+
+---
+
+## Requirements
+
+Any current browser with Web Audio and Web Crypto — iOS Safari, Android Chrome or
+Firefox, and desktop Chrome, Edge, Firefox or Safari.
+
+Microphone capture needs **HTTPS or localhost**. Transmitting, WAV export/import
+and text encryption all work from a saved file. For radio work a cable into the
+rig beats acoustic coupling, and on a phone check the ring/silent switch (it
+mutes Web Audio in Safari) and set Auto-Lock to Never so the screen does not
+sleep mid-transmission.
